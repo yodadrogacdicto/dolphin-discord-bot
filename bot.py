@@ -1,4 +1,4 @@
-"""Dolphin - bot de Discord (OpenRouter + dolphin-mistral-24b-venice) para Replit."""
+"""Dolphin - bot de Discord con modelos SOLO sin censura (AI Horde gratis + Venice/Unlid/Heabsy/Refuseless opcionales)."""
 import asyncio
 import io
 import json
@@ -193,9 +193,10 @@ class DolphinBot(discord.Client):
             return
         if prompt.lower() in MODEL_WORDS:
             online = await providers.horde_online_models(self.session)
-            lines = [f"**Último modelo usado:** `{LAST_MODEL['name']}`", "**Orden (todos gratis):**"]
-            if providers.OPENROUTER_API_KEY:
-                lines += [f"• OpenRouter: `{m}`" for m in providers.OPENROUTER_MODELS]
+            lines = [f"**Último modelo usado:** `{LAST_MODEL['name']}`", "**Orden (solo sin censura):**"]
+            for prov, cfg in providers.PAID.items():
+                if cfg["key"]:
+                    lines += [f"• {prov.capitalize()}: `{m}`" for m in cfg["models"]]
             lines += [f"• Horde {'🟢' if online is None or m in online else '🔴'} `{m}`" for m in providers.HORDE_MODELS]
             await self.safe_reply(message, "\n".join(lines))
             return
