@@ -1,7 +1,7 @@
 # Dolphin – Bot de Discord (solo modelos 100% gratis)
 
 Usa **failover automático** entre modelos gratuitos (si uno falla, pasa al siguiente):
-1. **OpenRouter** `cognitivecomputations/dolphin-mistral-24b-venice-edition:free` (si pones `OPENROUTER_API_KEY`, que es gratis).
+1. **Solo modelos sin censura.** Nada de OpenRouter.
 2. **AI Horde** (sin cuenta ni tarjeta), en este orden, saltando los que no tengan workers online:
    Mistral-Nemo-2407 HERETIC, gemma-4-31B-it-heretic, Gemma-4-E4B Ultra-Uncensored-Heretic, Gemma-4-E4B HauhauCS Aggressive, L3-8B-Stheno-v3.2, gemma-3-4b-it-heretic.
 
@@ -27,7 +27,7 @@ Ojo: AI Horde depende de voluntarios; puede haber cola y respuestas más lentas/
 ## Hostear en Railway (24/7)
 1. Sube esta carpeta a un repo de GitHub (o usa `railway up` con la CLI).
 2. En railway.com: **New Project → Deploy from GitHub repo** y elige el repo. Railway detecta el `Dockerfile` y `railway.json` solo.
-3. En **Variables** agrega: `DISCORD_TOKEN` (obligatoria), `OWNER_IDS` (tu ID de Discord), y opcionales `OPENROUTER_API_KEY`, `GITHUB_TOKEN`, `HORDE_API_KEY`.
+3. En **Variables** agrega: `DISCORD_TOKEN` (obligatoria), `OWNER_IDS` (tu ID de Discord), y opcionales `GITHUB_TOKEN`, `HORDE_API_KEY`, `VENICE_API_KEY`.
 4. En Discord Developer Portal activa **MESSAGE CONTENT INTENT**.
 5. Deploy. El healthcheck está en `/health`; en los logs debe salir `Conectado como ...`.
 Comandos nuevos: `CRYPTO`, `STACK` (Stack Overflow), `DNS`, `GHFILE`, y `WEBHOOK` ahora acepta método (`PUT url | json`) y reintenta en 429.
@@ -37,7 +37,7 @@ Seguridad: ejecutar código, webhooks y la API de GitHub siguen siendo solo para
 1. Crea un Repl de **Python** y sube todos los archivos de esta carpeta (o importa el ZIP).
 2. En **Secrets** (candado) agrega:
    - `DISCORD_TOKEN`
-   - (opcional) `OPENROUTER_API_KEY` y `HORDE_API_KEY`
+   - (opcional) `HORDE_API_KEY` y keys de pago sin censura (`VENICE_API_KEY`, `UNLID_API_KEY`, `HEABSY_API_KEY`, `REFUSELESS_API_KEY`)
    - (opcional) `GITHUB_TOKEN`
 3. En la Shell: `pip install -r requirements.txt`
 4. Pulsa **Run**.
@@ -55,7 +55,7 @@ El bot levanta un mini servidor web en el puerto 8080. Opciones: Deployment (Res
 - Los modelos gratis tienen límites y colas; el bot reintenta y cambia de modelo solo.
 - Los archivos se leen en memoria (no se extraen a disco), con límites contra zip-bombs. Imágenes: solo metadatos (el modelo es de texto).
 - APK: para leer el manifest completo descomenta `androguard` en `requirements.txt`.
-- Variables opcionales: `MAX_TOKENS`, `TEMPERATURE`, `HISTORY_TURNS`, `FILE_CHAR_BUDGET`, `OPENROUTER_MODEL`, `HORDE_MODELS`, `PROVIDER_ORDER`.
+- Variables opcionales: `MAX_TOKENS`, `TEMPERATURE`, `HISTORY_TURNS`, `FILE_CHAR_BUDGET`, `HORDE_MODELS`, `VENICE_MODELS`, `UNLID_MODELS`, `PROVIDER_ORDER`.
 
 ## Build en GitHub (solo OWNER_IDS)
 Con `GITHUB_TOKEN` (scopes `repo` y `workflow`): pide "apk", "exe" o "hostea la web" y el bot crea un repo, compila en GitHub Actions (APK en Ubuntu, EXE en Windows para Python/Node/Go/Rust/.NET) y te manda el archivo, o publica la web en GitHub Pages (repo público).
@@ -63,7 +63,10 @@ Con `GITHUB_TOKEN` (scopes `repo` y `workflow`): pide "apk", "exe" o "hostea la 
 ## Skills nuevas (v9)
 TRANSLATE, CURRENCY, IP, QR, SHORT, DEFINE, STATUS, GHUSER, RELEASES, NEWS, HASH, B64, UUID, JSON.
 
-## Modelos gratis
-1. AI Horde: modelos sin censura de la comunidad (Behemoth 128B, Skyfall 31B, Dark Orthia 31B, Wicked Tutu, Rocinante, Cydonia, Stheno...). Sin cuenta.
-2. Respaldo OpenRouter `:free` (necesita `OPENROUTER_API_KEY` gratis): Nemotron Ultra 550B, Gemma 4 31B, etc. Cámbialos con `OPENROUTER_FALLBACK`.
-El modelo dolphin `:free` ya no existe en OpenRouter (ahora es de pago), por eso se quitó.
+## Modelos (solo sin censura, cero OpenRouter)
+1. **AI Horde — GRATIS, sin cuenta:** Behemoth 128B, Skyfall 31B, Gemma-4 Dark Orthia 31B, Wicked Tutu 31B, MeroMero 26B heretic, Gemma-4 31B heretic, Cydonia 24B, Rocinante 12B, NemoMix Unleashed, Mistral-Nemo Uncensored HERETIC, Stheno 8B, LFM3 Uncensored... y cualquier modelo uncensored nuevo que aparezca online se agrega solo.
+2. **Venice (pago, `VENICE_API_KEY`):** venice-uncensored-1-2, deepseek-v4-1-flash-1017-uncensored, glm-5-3-flash-uncensored, gemma-4-uncensored, glm-4.7-flash-heretic, venice-uncensored-role-play.
+3. **Unlid (pago, `UNLID_API_KEY`):** deepseek/glm/qwen/gemma uncensored y abliterated.
+4. **Heabsy (pago, `HEABSY_API_KEY`):** deepseek/glm/qwen/mimo -unc.
+5. **Refuseless (pago, `REFUSELESS_API_KEY`):** glm/deepseek abliterated.
+Sin keys de pago el bot usa solo AI Horde (gratis).
