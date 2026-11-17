@@ -1,0 +1,13 @@
+discord.py>=2.4
+aiohttp>=3.9
+beautifulsoup4>=4.12
+ddgs>=9.0
+pypdf>=4.0
+python-docx>=1.1
+openpyxl>=3.1
+py7zr>=0.21
+rarfile>=4.2
+Pillow>=10.0
+python-dotenv>=1.0
+# Opcional (análisis completo de AndroidManifest en APK; sin esto usa modo aproximado):
+# androguard>=4.1
