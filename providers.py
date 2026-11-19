@@ -1,14 +1,4 @@
-"""Proveedores SOLO sin censura con failover automático. Cero OpenRouter.
-
-Orden por defecto:
-  1) AI Horde  -> modelos uncensored/heretic/abliterated de la comunidad (GRATIS, sin cuenta)
-  2) Venice    -> venice-uncensored y variantes uncensored (de pago, solo si pones VENICE_API_KEY)
-  3) Unlid     -> uncensored/abliterated (de pago, solo si pones UNLID_API_KEY)
-  4) Heabsy    -> uncensored (de pago, solo si pones HEABSY_API_KEY)
-  5) Refuseless-> abliterated (de pago, solo si pones REFUSELESS_API_KEY)
-  6) extra     -> cualquier API compatible con OpenAI (EXTRA_BASE_URL + EXTRA_API_KEY + EXTRA_MODELS)
-Todo ID que no sea uncensored/abliterated/heretic se descarta, aunque venga de una variable.
-"""
+"""Solo usa modelos gratuitos: AI Horde y modelos OpenRouter marcados :free."""
 import asyncio
 import json
 import logging
@@ -22,11 +12,13 @@ log = logging.getLogger("dolphin.providers")
 
 HORDE_BASE = "https://oai.aihorde.net/v1"
 HORDE_STATUS_URL = "https://aihorde.net/api/v2/status/models?type=text"
-
-# Proveedor extra opcional (cualquier API compatible con OpenAI y tier gratis). Ej: EXTRA_BASE_URL=https://.../v1
-EXTRA_BASE_URL = os.getenv("EXTRA_BASE_URL", "").rstrip("/")
-EXTRA_API_KEY = os.getenv("EXTRA_API_KEY", "")
-EXTRA_MODELS = [m.strip() for m in os.getenv("EXTRA_MODELS", "").split(",") if m.strip()]
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODELS = [
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
+]
+if os.getenv("OPENROUTER_MODELS"):
+    OPENROUTER_MODELS = [m.strip() for m in os.getenv("OPENROUTER_MODELS").split(",") if m.strip()]
 HORDE_API_KEY = os.getenv("HORDE_API_KEY", "0000000000")  # anónima; con cuenta gratis tienes más prioridad
 
 
@@ -49,13 +41,16 @@ HORDE_MODELS = [
     "koboldcpp/gemma-4-31B-it-heretic",
     "koboldcpp/Gemma-4-E4B-it-Ultra-Uncensored-Heretic",
     "koboldcpp/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M",
+    "koboldcpp/Cydonia-24B-v4.3-heretic-Q4_K_M",
+    "Qwen3.8-Flash-Next-Uncensored-NVFP4",
+    "koboldcpp/G4-MeroMero-26B-A4B-it-uncensored-heretic",
     "koboldcpp/L3-8B-Stheno-v3.2",
     "koboldcpp/gemma-3-4b-it-heretic",
 ]
 if os.getenv("HORDE_MODELS"):
     HORDE_MODELS = [m.strip() for m in os.getenv("HORDE_MODELS").split(",") if m.strip()]
 
-PROVIDER_ORDER = [p.strip().lower() for p in os.getenv("PROVIDER_ORDER", "horde,venice,unlid,heabsy,refuseless,extra").split(",") if p.strip()]
+PROVIDER_ORDER = ["horde", "openrouter"]
 HORDE_MAX_TOKENS = int(os.getenv("HORDE_MAX_TOKENS", "1024"))            # el tier anónimo limita la longitud
 HORDE_MAX_CONTEXT_CHARS = int(os.getenv("HORDE_MAX_CONTEXT_CHARS", "10000"))
 HORDE_TIMEOUT = int(os.getenv("HORDE_TIMEOUT", "180"))
@@ -66,17 +61,10 @@ HORDE_BIG = "koboldcpp/gemma-4-31B-it-heretic"
 HORDE_CHAT_FIRST = ["koboldcpp/Mistral-Nemo-2407-Thinking-Claude-Gemini-GPT5.2-Uncensored-HERETIC",
                     "koboldcpp/L3-8B-Stheno-v3.2"]
 
-# Solo modelos sin censura: cualquier ID que no cuadre se descarta, aunque venga de una variable de entorno.
+# Solo nombres identificados como uncensored, heretic, abliteration o variantes afines.
 ALLOWED_RE = re.compile(r"uncensored|heretic|abliterat|dolphin|stheno|[-_]unc\b|hauhaucs|behemoth|skyfall|cydonia|"
                         r"rocinante|wicked|dark|magnum|unleashed|impish|orthia|nocturne|drummer|lumimaid|"
                         r"midnight|mythomax|lewd|nsfw|erebus|pygmalion|euryale|celeste|-abl\b", re.I)
-REFUSAL_RE = re.compile(
-    r"^\W*(lo siento|perd[oó]n|disculpa|no puedo|no me es posible|lamentablemente|i'?m sorry|i am sorry|sorry|"
-    r"i can(?:'|no)t|i cannot|i won'?t|as an ai|como (?:una )?(?:ia|inteligencia artificial|modelo de lenguaje))", re.I)
-
-
-def is_refusal(text):
-    return bool(REFUSAL_RE.match(text.strip()[:160]))
 
 
 def only_uncensored(models):
@@ -88,33 +76,11 @@ def only_uncensored(models):
 
 
 HORDE_MODELS = only_uncensored(HORDE_MODELS)
-EXTRA_MODELS = only_uncensored(EXTRA_MODELS)
-
-
-def _env_models(name, default):
-    return only_uncensored([m.strip() for m in os.getenv(name, default).split(",") if m.strip()])
-
-
-# Proveedores de pago SIN censura. Solo se usan si pones su API key. IDs de Venice verificados en su catálogo
-# público (16-11-2026); los de Unlid/Heabsy/Refuseless salen de tu catálogo: confírmalos con GET /v1/models.
-PAID = {
-    "venice": {"url": "https://api.venice.ai/api/v1", "key": os.getenv("VENICE_API_KEY", ""),
-               "models": _env_models("VENICE_MODELS",
-                   "venice-uncensored-1-2,deepseek-v4-1-flash-1017-uncensored,glm-5-3-flash-uncensored,"
-                   "gemma-4-uncensored,olafangensan-glm-4.7-flash-heretic,venice-uncensored-role-play,"
-                   "abliteration-abliterated-model-large-flash")},
-    "unlid": {"url": "https://api.unlid.ai/v1", "key": os.getenv("UNLID_API_KEY", ""),
-              "models": _env_models("UNLID_MODELS",
-                  "deepseek-v4.1-flash-uncensored,glm-5.3-uncensored,qwen3.8-27b-uncensored,"
-                  "glm-5.3-flash-abliterated,gemma-4-31b-uncensored,dolphin-mistral-24b-uncensored,"
-                  "deepseek-v4.1-flash-heretic,supergemma4-26b-uncensored")},
-    "heabsy": {"url": "https://api.heabsy.com/v1", "key": os.getenv("HEABSY_API_KEY", ""),
-               "models": _env_models("HEABSY_MODELS",
-                   "deepseek-v4.1-flash-unc,glm53-flash-unc,qwen38-unc,mimo-v26-flash-unc,mimo-v26-flash-abl")},
-    "refuseless": {"url": "https://api.refuseless.com/v1", "key": os.getenv("REFUSELESS_API_KEY", ""),
-                   "models": _env_models("REFUSELESS_MODELS",
-                       "glm-5.3-abliterated,deepseek-v4.1-flash-abliterated,glm-5.3-flash-abliterated")},
-}
+OPENROUTER_MODELS = [
+    model for model in OPENROUTER_MODELS
+    if model.lower().endswith(":free") and ALLOWED_RE.search(model)
+]
+_openrouter_cache = {"t": 0.0, "models": None}
 
 _REPEAT_RE = re.compile(r"(.{2,40}?)\1{6,}", re.S)
 _LATIN_RE = re.compile(r"[A-Za-z0-9\u00C0-\u024F\s\.,;:!?¡¿'\"()\[\]{}<>/\\\-_=+*#@$%&|`~^]")
@@ -165,6 +131,34 @@ async def horde_online_models(session):
         return None
 
 
+async def openrouter_free_models(session):
+    """Lee el catálogo público y acepta solo IDs :free con nombre uncensored verificado."""
+    if not OPENROUTER_API_KEY:
+        return []
+    if time.time() - _openrouter_cache["t"] < 300 and _openrouter_cache["models"] is not None:
+        return _openrouter_cache["models"]
+    try:
+        async with session.get(
+            f"{OPENROUTER_BASE}/models",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as response:
+            if response.status != 200:
+                return list(OPENROUTER_MODELS)
+            data = await response.json()
+        found = [
+            item.get("id", "")
+            for item in data.get("data", [])
+            if item.get("id", "").lower().endswith(":free")
+            and ALLOWED_RE.search(item.get("id", ""))
+        ]
+        models = found or list(OPENROUTER_MODELS)
+        _openrouter_cache.update(t=time.time(), models=models)
+        return models
+    except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError):
+        return list(OPENROUTER_MODELS)
+
+
 def _trim_for_horde(messages):
     """Los workers de Horde tienen contexto corto: quita historial viejo y recorta el último mensaje."""
     system, rest = messages[0], messages[1:]
@@ -207,24 +201,12 @@ async def _post(session, url, key, payload, timeout, extra_headers=None):
         return 200, body, None
 
 
-async def _try_paid(session, prov, model, messages, max_tokens, temperature):
-    cfg = PAID[prov]
-    payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
-    if prov == "venice":  # quita el prompt de sistema propio de Venice para que mande el nuestro
-        payload["venice_parameters"] = {"include_venice_system_prompt": False}
-    try:
-        status, body, content = await _post(session, f"{cfg['url']}/chat/completions", cfg["key"], payload, 120)
-    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-        raise LLMError(str(e) or type(e).__name__)
-    if content:
-        return content
-    raise LLMError(f"HTTP {status}: {body[:150]}")
-
-
-async def _try_extra(session, model, messages, max_tokens, temperature):
+async def _try_openrouter(session, model, messages, max_tokens, temperature):
     payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     try:
-        status, body, content = await _post(session, f"{EXTRA_BASE_URL}/chat/completions", EXTRA_API_KEY, payload, 120)
+        status, body, content = await _post(
+            session, f"{OPENROUTER_BASE}/chat/completions", OPENROUTER_API_KEY, payload, 120
+        )
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         raise LLMError(str(e) or type(e).__name__)
     if content:
@@ -267,47 +249,22 @@ async def _try_horde(session, model, messages, max_tokens, temperature):
 
 
 async def chat(session, messages, max_tokens=4096, temperature=0.7, mode="work"):
-    """Prueba cada modelo gratis en orden hasta que uno responda. Devuelve (texto, 'proveedor:modelo')."""
+    """Prueba proveedores gratuitos; una negativa es respuesta, no motivo para eludirla."""
     deadline = time.time() + TOTAL_TIMEOUT
     errors = []
-    refused = None
-    order = list(PROVIDER_ORDER)
-    if "extra" not in order and EXTRA_BASE_URL and EXTRA_MODELS:
-        order.append("extra")
-    for provider in order:
-        if provider in PAID:
-            if not (PAID[provider]["key"] and PAID[provider]["models"]):
-                continue
-            candidates = [(provider, m) for m in PAID[provider]["models"]]
-        elif provider == "horde":
-            candidates = [("horde", m) for m in await horde_candidates(session, mode)]
-        elif provider == "extra":
-            if not (EXTRA_BASE_URL and EXTRA_MODELS):
-                continue
-            candidates = [("extra", m) for m in EXTRA_MODELS]
-        else:
-            continue
-        for prov, model in candidates:
-            if time.time() > deadline:
-                raise LLMError("Se acabó el tiempo probando modelos gratis: " + " | ".join(errors[-3:]))
-            try:
-                if prov in PAID:
-                    text = await _try_paid(session, prov, model, messages, max_tokens, temperature)
-                else:
-                    fn = _try_extra if prov == "extra" else _try_horde
-                    text = await fn(session, model, messages, max_tokens, temperature)
-                if is_garbage(text):
-                    raise LLMError("salida basura (bucle o alfabeto raro)")
-                if is_refusal(text):  # se negó: prueba el siguiente modelo sin censura
-                    log.warning("Rechazó %s:%s", prov, model)
-                    refused = refused or (text, f"{prov}:{model}")
-                    errors.append(f"{model.split('/')[-1]}: se negó")
-                    continue
-                log.info("Respondió %s:%s", prov, model)
-                return text, f"{prov}:{model}"
-            except LLMError as e:
-                log.warning("Falló %s:%s -> %s", prov, model, e)
-                errors.append(f"{model.split('/')[-1]}: {e}")
-    if refused:
-        return refused
-    raise LLMError("Ningún modelo sin censura respondió. Últimos errores: " + " | ".join(errors[-3:]))
+    candidates = [("horde", model) for model in await horde_candidates(session, mode)]
+    candidates += [("openrouter", model) for model in await openrouter_free_models(session)]
+    for prov, model in candidates:
+        if time.time() > deadline:
+            raise LLMError("Se acabó el tiempo probando modelos gratis: " + " | ".join(errors[-3:]))
+        try:
+            fn = _try_openrouter if prov == "openrouter" else _try_horde
+            text = await fn(session, model, messages, max_tokens, temperature)
+            if is_garbage(text):
+                raise LLMError("salida basura (bucle o alfabeto raro)")
+            log.info("Respondió %s:%s", prov, model)
+            return text, f"{prov}:{model}"
+        except LLMError as e:
+            log.warning("Falló %s:%s -> %s", prov, model, e)
+            errors.append(f"{model.split('/')[-1]}: {e}")
+    raise LLMError("Ningún modelo gratuito del catálogo respondió. Últimos errores: " + " | ".join(errors[-3:]))

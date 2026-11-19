@@ -7,7 +7,7 @@ import signal
 import socket
 import sys
 import tempfile
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -365,11 +365,21 @@ async def webhook(arg, ctx):
         method, url = m.group(1).upper(), m.group(2).strip()
     if not await _is_safe(url):
         return "URL no permitida."
+    parsed = urlsplit(url)
+    is_discord = (parsed.hostname or "").lower() in {"discord.com", "discordapp.com"}
+    if is_discord and not re.fullmatch(r"/api/webhooks/\d+/[^/]+/?", parsed.path):
+        return "La URL no tiene el formato de un webhook de Discord."
+    if is_discord and method != "POST":
+        return "Los webhooks de Discord deben enviarse con POST."
     payload = re.sub(r"^```(?:json)?\s*|\s*```$", "", payload)
     try:
         body = _json.loads(payload) if payload else None
     except ValueError:
-        body = {"content": payload[:1900]} if "discord" in url else None
+        body = {"content": payload[:1900]} if is_discord else None
+    if is_discord:
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["wait"] = "true"
+        url = urlunsplit(parsed._replace(query=urlencode(query)))
     last = ""
     async with aiohttp.ClientSession(headers={"User-Agent": UA}) as s:
         for attempt in range(3):
@@ -383,10 +393,15 @@ async def webhook(arg, ctx):
                                      allow_redirects=False, **kw) as r:
                     txt = (await r.text())[:300]
                     if r.status == 429:
-                        wait = min(float(r.headers.get("Retry-After", "2") or 2), 10)
+                        try:
+                            wait = min(float(r.headers.get("Retry-After", "2") or 2), 10)
+                        except ValueError:
+                            wait = 2
                         await asyncio.sleep(wait)
                         last = f"HTTP 429: {txt}"
                         continue
+                    if is_discord and r.status in (200, 201, 204):
+                        return f"Mensaje enviado a Discord (HTTP {r.status})."
                     return f"HTTP {r.status}: {txt}"
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 last = f"Error de red: {e}"
